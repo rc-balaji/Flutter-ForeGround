@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toggle Visibility</title>
+    <style>
+        #container {
+            width: 200px;
+            height: 100px;
+            background-color: lightblue;
+            display: block;
+            text-align: center;
+            line-height: 100px;
+            font-size: 18px;
+            border: 1px solid #000;
+        }
+    </style>
+</head>
+
+<body>
+    <button onclick="toggleVisibility()" onfocusout="focusOut()">Toggle Visibility</button>
+    <div id="container">
+        <button id="red">Hello</button>
+    </div>
+
+    <script>
+        function toggleVisibility() {
+            var container = document.getElementById("container");
+            if (container.style.display === "none") {
+                container.style.display = "block";
+                addClickListener(); // Ensure listener is added when shown
+            } else {
+                container.style.display = "none";
+                removeEventListener()
+            }
+        }
+
+        function focusOut() {
+            document.getElementById("container").style.display = "none";
+        }
+
+        function addClickListener() {
+
+            console.log("ADDING 1")
+
+            document.getElementById('red').addEventListener('click', handleButtonClick);
+        }
+
+        function handleButtonClick() {
+            new Promise((resolve, reject) => {
+                resolve("Click");
+            }).then((data) => {
+                console.log(data);
+                // Hide container AFTER the promise resolution
+                alert("sss");
+                document.getElementById("container").style.display = "none";
+            });
+        }
+
+        // Initially add the listener
+        addClickListener();
+    </script>
+</body>
+
+</html>

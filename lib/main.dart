@@ -3,109 +3,87 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:geolocator/geolocator.dart';
 
 void main() {
   FlutterForegroundTask.initCommunicationPort();
-  runApp(const StopwatchApp());
+  runApp(const LocationApp());
 }
 
 @pragma('vm:entry-point')
 void startCallback() {
-  FlutterForegroundTask.setTaskHandler(StopwatchTaskHandler());
+  FlutterForegroundTask.setTaskHandler(LocationTaskHandler());
 }
 
-class StopwatchTaskHandler extends TaskHandler {
+class LocationTaskHandler extends TaskHandler {
   late Timer _timer;
-  Duration _elapsed = Duration.zero;
+  List<String> _locations = [];
 
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _elapsed += const Duration(seconds: 1);
+  void _startFetchingLocation() {
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      Position position = await _getCurrentLocation();
+      String locationString =
+          '${position.latitude}, ${position.longitude} at ${DateTime.now().toLocal()}';
+
+      _locations.add(locationString);
       FlutterForegroundTask.updateService(
-        notificationTitle: 'Stopwatch Running',
-        notificationText: _formatDuration(_elapsed),
+        notificationTitle: 'Tracking Location',
+        notificationText: 'Total: ${_locations.length} | $locationString',
       );
-      FlutterForegroundTask.sendDataToMain(_formatDuration(_elapsed));
+      FlutterForegroundTask.sendDataToMain(_locations);
     });
   }
 
-  void _stopTimer() {
+  void _stopFetchingLocation() {
     _timer.cancel();
   }
 
-  void _resetTimer() {
-    _elapsed = Duration.zero;
-    FlutterForegroundTask.updateService(
-      notificationTitle: 'Stopwatch Reset',
-      notificationText: _formatDuration(_elapsed),
-    );
-    FlutterForegroundTask.sendDataToMain(_formatDuration(_elapsed));
-  }
-
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final hours = twoDigits(duration.inHours);
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
-    final seconds = twoDigits(duration.inSeconds.remainder(60));
-    return '$hours:$minutes:$seconds';
+  Future<Position> _getCurrentLocation() async {
+    return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
   }
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    // _startTimer();
+    _startFetchingLocation();
   }
 
   @override
-  void onRepeatEvent(DateTime timestamp) {
-    // This can be used for periodic updates if needed
-  }
+  void onRepeatEvent(DateTime timestamp) {}
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
-    _stopTimer();
+    _stopFetchingLocation();
   }
 
   @override
   void onReceiveData(Object data) {
-    if (data == 'start') {
-      _startTimer();
-    } else if (data == 'stop') {
-      _stopTimer();
-    } else if (data == 'reset') {
-      _resetTimer();
-    }
-  }
-
-  @override
-  void onNotificationButtonPressed(String id) {
-    if (id == 'start') {
-      _startTimer();
-    } else if (id == 'stop') {
-      _stopTimer();
-    } else if (id == 'reset') {
-      _resetTimer();
+    if (data == 'stop') {
+      _stopFetchingLocation();
+    } else if (data == 'start') {
+      _startFetchingLocation();
     }
   }
 }
 
-class StopwatchApp extends StatelessWidget {
-  const StopwatchApp({super.key});
+class LocationApp extends StatelessWidget {
+  const LocationApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: StopwatchPage(),
+      home: LocationPage(),
     );
   }
 }
 
-class StopwatchPage extends StatefulWidget {
+class LocationPage extends StatefulWidget {
   @override
-  _StopwatchPageState createState() => _StopwatchPageState();
+  _LocationPageState createState() => _LocationPageState();
 }
 
-class _StopwatchPageState extends State<StopwatchPage> {
-  Duration _elapsed = Duration.zero;
+class _LocationPageState extends State<LocationPage> {
+  List<String> _locations = [];
   late final Function(Object) _taskDataCallback;
 
   @override
@@ -113,15 +91,15 @@ class _StopwatchPageState extends State<StopwatchPage> {
     super.initState();
     _taskDataCallback = (data) {
       setState(() {
-        _elapsed = _parseDuration(data.toString());
+        _locations = List<String>.from(data as List);
       });
     };
 
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'stopwatch_channel',
-        channelName: 'Stopwatch Notifications',
-        channelDescription: 'Notifications for stopwatch actions',
+        channelId: 'location_channel',
+        channelName: 'Location Tracking',
+        channelDescription: 'Tracks live location every 2 seconds',
         onlyAlertOnce: true,
         priority: NotificationPriority.HIGH,
       ),
@@ -129,47 +107,23 @@ class _StopwatchPageState extends State<StopwatchPage> {
         showNotification: true,
       ),
       foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction:
-            ForegroundTaskEventAction.repeat(1000), // Update every second
+        eventAction: ForegroundTaskEventAction.repeat(2000),
         autoRunOnBoot: false,
         allowWakeLock: true,
       ),
     );
 
-    // Start the foreground service
     FlutterForegroundTask.startService(
-      notificationTitle: 'Stopwatch App',
-      notificationText: 'Tap to open the app',
+      notificationTitle: 'Location Tracker',
+      notificationText: 'Fetching live location...',
       callback: startCallback,
       notificationButtons: [
-        NotificationButton(
-          id: 'start',
-          text: 'Start',
-        ),
-        NotificationButton(
-          id: 'stop',
-          text: 'Stop',
-        ),
-        NotificationButton(
-          id: 'reset',
-          text: 'Reset',
-        ),
+        NotificationButton(id: 'start', text: 'Start'),
+        NotificationButton(id: 'stop', text: 'Stop'),
       ],
     );
 
-    // Listen for data from the foreground task
     FlutterForegroundTask.addTaskDataCallback(_taskDataCallback);
-  }
-
-  Duration _parseDuration(String data) {
-    final parts = data.split(':');
-    if (parts.length == 3) {
-      final hours = int.parse(parts[0]);
-      final minutes = int.parse(parts[1]);
-      final seconds = int.parse(parts[2]);
-      return Duration(hours: hours, minutes: minutes, seconds: seconds);
-    }
-    return Duration.zero;
   }
 
   void _exitApp() {
@@ -185,54 +139,47 @@ class _StopwatchPageState extends State<StopwatchPage> {
 
   @override
   Widget build(BuildContext context) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final hours = twoDigits(_elapsed.inHours);
-    final minutes = twoDigits(_elapsed.inMinutes.remainder(60));
-    final seconds = twoDigits(_elapsed.inSeconds.remainder(60));
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Stopwatch App'),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('$hours:$minutes:$seconds',
-                style: const TextStyle(fontSize: 48)),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton(
-                  onPressed: () {
-                    FlutterForegroundTask.sendDataToTask('start');
-                  },
-                  child: const Text('Start'),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: () {
-                    FlutterForegroundTask.sendDataToTask('stop');
-                  },
-                  child: const Text('Stop'),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: () {
-                    FlutterForegroundTask.sendDataToTask('reset');
-                  },
-                  child: const Text('Reset'),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: _exitApp,
-                  child: const Text('Exit'),
-                ),
-              ],
-            )
-          ],
-        ),
+      appBar: AppBar(title: const Text('Live Location Tracker')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              'Total Locations Stored: ${_locations.length}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _locations.length,
+              itemBuilder: (context, index) {
+                return ListTile(
+                  title: Text(_locations[index]),
+                );
+              },
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () => FlutterForegroundTask.sendDataToTask('start'),
+                child: const Text('Start'),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: () => FlutterForegroundTask.sendDataToTask('stop'),
+                child: const Text('Stop'),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: _exitApp,
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

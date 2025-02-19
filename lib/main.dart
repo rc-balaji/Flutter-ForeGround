@@ -203,10 +203,10 @@ class _LocationPageState extends State<LocationPage> {
       notificationTitle: 'Location Tracker',
       notificationText: 'Fetching live location...',
       callback: startCallback,
-      notificationButtons: [
-        NotificationButton(id: 'start', text: 'Start'),
-        NotificationButton(id: 'stop', text: 'Stop'),
-      ],
+      // notificationButtons: [
+      //   NotificationButton(id: 'start', text: 'Start'),
+      //   NotificationButton(id: 'stop', text: 'Stop'),
+      // ],
     );
 
     FlutterForegroundTask.addTaskDataCallback(_taskDataCallback);

@@ -37,7 +37,8 @@ class LocationTaskHandler extends TaskHandler {
         notificationText: 'Total: ${_locations.length} | $locationString',
       );
 
-      FlutterForegroundTask.sendDataToMain(_locations);
+      FlutterForegroundTask.sendDataToMain(
+          {'locations': _locations, 'isTracking': _isTracking});
     });
   }
 
@@ -63,7 +64,7 @@ class LocationTaskHandler extends TaskHandler {
 
   Future<Position> _getCurrentLocation() async {
     return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
+        desiredAccuracy: LocationAccuracy.best);
   }
 
   @override
@@ -84,7 +85,10 @@ class LocationTaskHandler extends TaskHandler {
   void onReceiveData(Object data) {
     if (data == 'stop') {
       _timer.cancel();
+      _isTracking = false;
       _saveTrackingStatus(false);
+      FlutterForegroundTask.sendDataToMain(
+          {'locations': _locations, 'isTracking': _isTracking});
     } else if (data == 'start') {
       _startFetchingLocation();
     } else if (data == 'clear') {
@@ -94,6 +98,8 @@ class LocationTaskHandler extends TaskHandler {
         notificationTitle: 'Tracking Location',
         notificationText: 'Location data cleared.',
       );
+      FlutterForegroundTask.sendDataToMain(
+          {'locations': _locations, 'isTracking': _isTracking});
     }
   }
 
@@ -103,7 +109,10 @@ class LocationTaskHandler extends TaskHandler {
       _startFetchingLocation();
     } else if (id == 'stop') {
       _timer.cancel();
+      _isTracking = false;
       _saveTrackingStatus(false);
+      FlutterForegroundTask.sendDataToMain(
+          {'locations': _locations, 'isTracking': _isTracking});
     }
   }
 
@@ -173,9 +182,12 @@ class _LocationPageState extends State<LocationPage> {
   void initState() {
     super.initState();
     _taskDataCallback = (data) {
-      setState(() {
-        _locations = List<String>.from(data as List);
-      });
+      if (data is Map<String, dynamic>) {
+        setState(() {
+          _locations = List<String>.from(data['locations'] ?? []);
+          _isTracking = data['isTracking'] ?? false;
+        });
+      }
     };
 
     _loadSavedLocations();
@@ -203,10 +215,6 @@ class _LocationPageState extends State<LocationPage> {
       notificationTitle: 'Location Tracker',
       notificationText: 'Fetching live location...',
       callback: startCallback,
-      // notificationButtons: [
-      //   NotificationButton(id: 'start', text: 'Start'),
-      //   NotificationButton(id: 'stop', text: 'Stop'),
-      // ],
     );
 
     FlutterForegroundTask.addTaskDataCallback(_taskDataCallback);

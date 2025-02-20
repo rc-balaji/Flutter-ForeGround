@@ -22,22 +22,37 @@ class LocationTaskHandler extends TaskHandler {
     _saveTrackingStatus(true);
 
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
-      Position position = await _getCurrentLocation();
-      String locationString =
-          '${position.latitude}, ${position.longitude} , ${DateTime.now().toLocal()}';
+      bool isLocationEnabled = await Geolocator.isLocationServiceEnabled();
 
-      print(locationString);
+      if (!isLocationEnabled) {
+        FlutterForegroundTask.updateService(
+          notificationTitle: 'Tracking Location',
+          notificationText: 'Please turn on Location',
+        );
 
-      _locations.add(locationString);
-      await _saveLocations();
+        FlutterForegroundTask.sendDataToMain(
+            {'error': 'Location is off', 'isTracking': _isTracking});
 
-      FlutterForegroundTask.updateService(
-        notificationTitle: 'Tracking Location',
-        notificationText: 'Total: ${_locations.length} | $locationString',
-      );
+        // Show snackbar in main UI (Assuming method exists in UI code)
+        FlutterForegroundTask.sendDataToMain({'showSnackbar': true});
+      } else {
+        Position position = await _getCurrentLocation();
+        String locationString =
+            '${position.latitude}, ${position.longitude} , ${DateTime.now().toLocal()}';
 
-      FlutterForegroundTask.sendDataToMain(
-          {'locations': _locations, 'isTracking': _isTracking});
+        print(locationString);
+
+        _locations.add(locationString);
+        await _saveLocations();
+
+        FlutterForegroundTask.updateService(
+          notificationTitle: 'Tracking Location',
+          notificationText: 'Total: ${_locations.length} | $locationString',
+        );
+
+        FlutterForegroundTask.sendDataToMain(
+            {'locations': _locations, 'isTracking': _isTracking});
+      }
     });
   }
 
@@ -141,9 +156,30 @@ class _LocationPageState extends State<LocationPage> {
     _taskDataCallback = (data) {
       if (data is Map<String, dynamic>) {
         setState(() {
-          _locations = List<String>.from(data['locations'] ?? []);
-          _isTracking = data['isTracking'] ?? false;
+          if (data.containsKey('error')) {
+            // Show SnackBar for error
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(data['error']),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } else {
+            // Update state with valid data
+            _locations = List<String>.from(data['locations'] ?? []);
+            _isTracking = data['isTracking'] ?? false;
+          }
         });
+      } else {
+        // Show a generic error SnackBar if data format is incorrect
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Invalid data received'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     };
 

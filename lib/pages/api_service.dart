@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter_foreground/utils.dart';
+import 'package:flutter_foreground/pages/utils.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {

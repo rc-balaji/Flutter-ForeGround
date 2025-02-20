@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground/api_service.dart';
+import 'package:flutter_foreground/geo_show.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,7 +29,9 @@ class LocationTaskHandler extends TaskHandler {
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       Position position = await _getCurrentLocation();
       String locationString =
-          '${position.latitude}, ${position.longitude} at ${DateTime.now().toLocal()}';
+          '${position.latitude}, ${position.longitude} , ${DateTime.now().toLocal()}';
+
+      print(locationString);
 
       _locations.add(locationString);
       await _saveLocations();
@@ -64,7 +68,7 @@ class LocationTaskHandler extends TaskHandler {
 
   Future<Position> _getCurrentLocation() async {
     return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.best);
+        desiredAccuracy: LocationAccuracy.high);
   }
 
   @override
@@ -216,7 +220,6 @@ class _LocationPageState extends State<LocationPage> {
       notificationText: 'Fetching live location...',
       callback: startCallback,
     );
-
     FlutterForegroundTask.addTaskDataCallback(_taskDataCallback);
   }
 
@@ -244,6 +247,53 @@ class _LocationPageState extends State<LocationPage> {
     FlutterForegroundTask.sendDataToTask('clear');
   }
 
+  void _saveLocation() async {
+    // Add 'async' here
+    var userId = "67a303c55e0bd56d2bdf48ff";
+    String locationName = "Office to Lunch";
+
+    Future<bool> res =
+        ApiService.saveLocation(userId, locationName, _locations);
+
+    if (await res) {
+      // Await the result
+      await FlutterForegroundTask.stopService();
+
+      Navigator.pop(context);
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => HomePage()),
+      );
+
+      _clearLocations();
+      _showErrorDialog("Saved Succesfully");
+    } else {
+      _showErrorDialog("Unable to Store: Network Issues");
+    }
+  }
+
+// Define a method to show an error dialog
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context, // Ensure you have access to `context`
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Error"),
+          content: Text(message),
+          actions: [
+            TextButton(
+              child: Text("OK"),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _exitApp() {
     FlutterForegroundTask.stopService();
   }
@@ -260,35 +310,38 @@ class _LocationPageState extends State<LocationPage> {
       appBar: AppBar(title: const Text('Live Location Tracker')),
       body: Column(
         children: [
-          Text('Total Locations Stored: ${_locations.length}',
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _locations.length,
-              itemBuilder: (context, index) {
-                return ListTile(title: Text(_locations[index]));
-              },
-            ),
-          ),
-          Row(
+          Column(
+            verticalDirection: VerticalDirection.down,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              ElevatedButton(
-                  onPressed: _isTracking
-                      ? null
-                      : () => FlutterForegroundTask.sendDataToTask('start'),
-                  child: const Text('Start')),
-              ElevatedButton(
-                  onPressed: _isTracking
-                      ? () => FlutterForegroundTask.sendDataToTask('stop')
-                      : null,
-                  child: const Text('Stop')),
-              ElevatedButton(
-                  onPressed: _clearLocations, child: const Text('Clear')),
-              ElevatedButton(onPressed: _exitApp, child: const Text('Exit')),
+              Row(
+                children: [
+                  ElevatedButton(
+                      onPressed: _isTracking
+                          ? null
+                          : () => FlutterForegroundTask.sendDataToTask('start'),
+                      child: const Text('Start')),
+                  ElevatedButton(
+                      onPressed: _isTracking
+                          ? () => FlutterForegroundTask.sendDataToTask('stop')
+                          : null,
+                      child: const Text('Stop')),
+                  ElevatedButton(
+                      onPressed: !_isTracking ? _saveLocation : null,
+                      child: const Text('Save')),
+                ],
+              ),
+              Row(
+                children: [
+                  ElevatedButton(
+                      onPressed: _clearLocations, child: const Text('Clear')),
+                  ElevatedButton(
+                      onPressed: _exitApp, child: const Text('Exit')),
+                ],
+              )
             ],
           ),
+          Expanded(child: GeoShow(locations: _locations)),
         ],
       ),
     );
